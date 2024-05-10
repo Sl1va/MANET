@@ -40,6 +40,10 @@ private:
 void Experiment::Run() {
     AnimationInterface anim("animation.xml");
 
+    for (uint32_t i = 0; i < this->c.GetN(); ++i) {
+        anim.UpdateNodeSize(i, 15, 15);
+    }
+
     // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
 
     OnOffHelper onoff1("ns3::UdpSocketFactory", Address());
