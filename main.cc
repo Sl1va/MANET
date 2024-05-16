@@ -14,10 +14,9 @@ NS_LOG_COMPONENT_DEFINE("MANET_EXPERIMENT");
 
 static inline void PrintPacketInfo(Ptr<Socket> socket, Ptr<Packet> packet, Address senderAddress);
 
-
 class Experiment {
 public:
-    Experiment (int nNodes);
+    Experiment(int nNodes);
     void Run();
 private:
     NodeContainer c;
@@ -53,8 +52,8 @@ void Experiment::Run() {
     for (int i = 0; i < this->nSinks; i++) {
         Ptr<Socket> sink = SetupPacketReceive(this->interfaces.GetAddress(i), this->c.Get(i));
         
-        AddressValue remoteAdress(InetSocketAddress(this->interfaces.GetAddress(i), 9));
-        onoff1.SetAttribute("Remote", remoteAdress);
+        AddressValue remoteAddress(InetSocketAddress(this->interfaces.GetAddress(i), 9));
+        onoff1.SetAttribute("Remote", remoteAddress);
 
         Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
         ApplicationContainer temp = onoff1.Install(this->c.Get(i + this->nSinks));
@@ -100,12 +99,12 @@ Experiment::Experiment(int nNodes) {
 
     // Wifi and Channel
     WifiHelper wifi;
-    YansWifiPhyHelper wifiPhy;
-    YansWifiChannelHelper wifiChannel;
+    YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default();
+    YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default();
 
-    wifi.SetStandard(WIFI_STANDARD_80211b);
+    wifi.SetStandard(WIFI_PHY_STANDARD_80211n_5GHZ);
     wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
-    wifiChannel.AddPropagationLoss("ns3::FriisPropagationLossModel");
+    wifiChannel.AddPropagationLoss("ns3::FriisPropagationLossModel", "MinLoss", DoubleValue(250));
     wifiPhy.SetChannel(wifiChannel.Create());
 
     // MAC address and disable rate control
@@ -193,12 +192,11 @@ Ptr<Socket> Experiment::SetupPacketReceive(Ipv4Address addr, Ptr<Node> node) {
     return sink;
 }
 
-
 int main(int argc, char *argv[]) {
     int nNodes = 20;
 
     CommandLine cmd;
-    cmd.AddValue ("nNodes", "number of nodes", nNodes);
+    cmd.AddValue("nNodes", "number of nodes", nNodes);
     cmd.Parse(argc, argv);
 
     Experiment exp = Experiment(nNodes);
