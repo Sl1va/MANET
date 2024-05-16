@@ -40,8 +40,16 @@ void Experiment::Run() {
     AnimationInterface anim("animation.xml");
 
     for (uint32_t i = 0; i < this->c.GetN(); ++i) {
-        anim.UpdateNodeSize(i, 15, 15);
+        anim.UpdateNodeSize(i, 1, 1);
     }
+
+    anim.EnablePacketMetadata(true);
+    anim.EnableIpv4RouteTracking("routingtable.xml",
+        Seconds(0),
+        Seconds(200),
+        Seconds(0.25));
+    anim.EnableWifiMacCounters(Seconds(0), Seconds(200));
+    anim.EnableWifiPhyCounters(Seconds(0), Seconds(200));
 
     // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
 
@@ -81,13 +89,13 @@ Experiment::Experiment(int nNodes) {
     ObjectFactory pos;
 
     pos.SetTypeId("ns3::RandomRectanglePositionAllocator");
-    pos.Set("X", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=500.0]"));
-    pos.Set("Y", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=500.0]"));
+    pos.Set("X", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
+    pos.Set("Y", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
     Ptr<PositionAllocator> taPositionAlloc = pos.Create()->GetObject<PositionAllocator>();
 
     mobility.SetPositionAllocator(taPositionAlloc);
     mobility.SetMobilityModel("ns3::RandomWaypointMobilityModel",
-        "Speed", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=20]"),
+        "Speed", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=5]"),
         "Pause", StringValue("ns3::ConstantRandomVariable[Constant=0]"),
         "PositionAllocator", PointerValue(taPositionAlloc));
     mobility.Install(this->c);
@@ -102,9 +110,11 @@ Experiment::Experiment(int nNodes) {
     YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default();
     YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default();
 
-    wifi.SetStandard(WIFI_PHY_STANDARD_80211n_5GHZ);
+    wifi.SetStandard(WIFI_PHY_STANDARD_80211b);
+    wifiPhy.Set("RxGain", DoubleValue(0));
     wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
-    wifiChannel.AddPropagationLoss("ns3::FriisPropagationLossModel", "MinLoss", DoubleValue(250));
+    // wifiChannel.AddPropagationLoss("ns3::FixedRssLossModel", "Rss", DoubleValue(-40));
+    wifiChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange", DoubleValue(20.0));
     wifiPhy.SetChannel(wifiChannel.Create());
 
     // MAC address and disable rate control
@@ -113,8 +123,8 @@ Experiment::Experiment(int nNodes) {
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
         "DataMode", StringValue("DsssRate11Mbps"),
         "ControlMode", StringValue("DsssRate11Mbps"));
-    wifiPhy.Set("TxPowerStart", DoubleValue(0.75));
-    wifiPhy.Set("TxPowerEnd", DoubleValue(0.75));
+    // wifiPhy.Set("TxPowerStart", DoubleValue(2));
+    // wifiPhy.Set("TxPowerEnd", DoubleValue(2));
 
     wifiMac.SetType("ns3::AdhocWifiMac");
     this->devices = wifi.Install(wifiPhy, wifiMac, this->c);
