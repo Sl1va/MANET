@@ -125,6 +125,7 @@ Experiment::Experiment(int nNodes) {
     InternetStackHelper internet;
 
     list.Add(olsr, 100);
+    internet.SetRoutingHelper(list);
     internet.Install(this->c);
 
     // Address assigning
