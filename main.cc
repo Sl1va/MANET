@@ -4,8 +4,10 @@
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
+#include "ns3/energy-module.h"
 #include "ns3/yans-wifi-helper.h"
 #include "ns3/olsr-module.h"
+#include "ns3/wifi-radio-energy-model-helper.h"
 #include "ns3/applications-module.h"
 #include "ns3/batmand-helper.h"
 
@@ -24,6 +26,8 @@ private:
     NodeContainer c;
     NetDeviceContainer devices;
     Ipv4InterfaceContainer interfaces;
+    DeviceEnergyModelContainer energies;
+    
     int nNodes;
     int nSinks;
     int totalBytes;
@@ -33,10 +37,18 @@ private:
     Vector GetPosition(Ptr<Node> node);
     void DisplayNodesPosition();
     void CheckTransferredData();
+    void CheckRemainingEnergy();
 
     void ReceivePacket(Ptr<Socket> socket);
     Ptr<Socket> SetupPacketReceive(Ipv4Address addr, Ptr<Node> node);
 };
+
+void Experiment::CheckRemainingEnergy() {
+    for (int i = 0; i < this->nNodes; i++) {
+        Ptr<DeviceEnergyModel> model = this->energies.Get(i);
+        std::cout << "Node [" << i << "] Energy consumption: " << model->GetTotalEnergyConsumption() << std::endl;
+    }
+}
 
 void Experiment::Run() {
     AnimationInterface anim("animation.xml");
@@ -85,7 +97,7 @@ void Experiment::Run() {
     // temp.Start(Seconds(120.0));
     // temp.Stop(Seconds(160.0));
 
-
+    Simulator::Schedule(Seconds(200.0), &Experiment::CheckRemainingEnergy, this);
 
 
     CheckTransferredData();
@@ -149,11 +161,25 @@ Experiment::Experiment(std::string routingProtocol) {
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
         "DataMode", StringValue(dataMode),
         "ControlMode", StringValue(dataMode));
-    // wifiPhy.Set("TxPowerStart", DoubleValue(2));
-    // wifiPhy.Set("TxPowerEnd", DoubleValue(2));
+    wifiPhy.Set("TxPowerStart", DoubleValue(2));
+    wifiPhy.Set("TxPowerEnd", DoubleValue(2));
 
     wifiMac.SetType("ns3::AdhocWifiMac");
     this->devices = wifi.Install(wifiPhy, wifiMac, this->c);
+
+    // Energy
+
+    BasicEnergySourceHelper basicSourceHelper;
+    basicSourceHelper.Set("BasicEnergySourceInitialEnergyJ", DoubleValue(10000.0));
+    basicSourceHelper.Set("PeriodicEnergyUpdateInterval", TimeValue(Seconds(1.0)));
+
+    EnergySourceContainer sources = basicSourceHelper.Install(this->c);
+
+    WifiRadioEnergyModelHelper radioEnergyHelper;
+    radioEnergyHelper.Set("TxCurrentA", DoubleValue(0.0174));
+    radioEnergyHelper.Set("RxCurrentA", DoubleValue(0.0174));
+
+    this->energies = radioEnergyHelper.Install(this->devices, sources);
 
     // Routing protocol
     OlsrHelper olsr;
@@ -241,12 +267,12 @@ int main(int argc, char *argv[]) {
     CommandLine cmd;
     cmd.Parse(argc, argv);
 
-    //Experiment expB = Experiment("BATMAN");
-    //expB.Run();
+    Experiment expB = Experiment("BATMAN");
+    expB.Run();
     
 
-    Experiment expO = Experiment("OLSR");
-    expO.Run();
+    //Experiment expO = Experiment("OLSR");
+    //expO.Run();
     
     return 0;
 }
