@@ -1,3 +1,7 @@
+#include <iostream>
+#include <fstream>
+#include <sstream>
+
 #include "ns3/log.h"
 #include "ns3/netanim-module.h"
 #include "ns3/core-module.h"
@@ -42,6 +46,15 @@ void Experiment::Run() {
 
     for (uint32_t i = 0; i < this->c.GetN(); ++i) {
         anim.UpdateNodeSize(i, 15, 15);
+
+        std::stringstream ss;
+        ss << "out/agent_" << (i+1);
+        std::ifstream mm(ss.str());
+
+        int r, g, b;
+        if (mm >> r >> g >> b) {
+            anim.UpdateNodeColor(i, r, g, b);
+        }
     }
 
     // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
@@ -78,20 +91,34 @@ Experiment::Experiment(int nNodes) {
     this->c.Create(this->nNodes);
 
     // Setting MobilityModel
-    MobilityHelper mobility;
-    ObjectFactory pos;
+    for (int i = 1; i <= nNodes; ++i) {
+        std::stringstream ss;
+        ss << "out/agent_" << i;
+        std::ifstream mm(ss.str());
 
-    pos.SetTypeId("ns3::RandomRectanglePositionAllocator");
-    pos.Set("X", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=500.0]"));
-    pos.Set("Y", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=500.0]"));
-    Ptr<PositionAllocator> taPositionAlloc = pos.Create()->GetObject<PositionAllocator>();
+        int r, g, b;
+        mm >> r >> g >> b;
 
-    mobility.SetPositionAllocator(taPositionAlloc);
-    mobility.SetMobilityModel("ns3::RandomWaypointMobilityModel",
-        "Speed", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=20]"),
-        "Pause", StringValue("ns3::ConstantRandomVariable[Constant=0]"),
-        "PositionAllocator", PointerValue(taPositionAlloc));
-    mobility.Install(this->c);
+        ns3::Ptr<ns3::WaypointMobilityModel> mobility = CreateObject<ns3::WaypointMobilityModel>();
+        ns3::ConstantVelocityHelper constantVelocityHelper;
+
+        int last_time = -1;
+        while(!mm.eof()){
+            int x, y, time;
+            mm >> x >> y >> time;
+
+            if (time == last_time) break;
+
+            std::cout << x << " " << y << " " << time << "\n";
+
+            ns3::Waypoint waypoint(ns3::Seconds(time), ns3::Vector(x, y, 0)); 
+            mobility->AddWaypoint(waypoint);
+
+            last_time = time;
+        }
+
+        this->c.Get(i-1)->AggregateObject(mobility);
+    }
 
     // Global configs
     Config::SetDefault("ns3::OnOffApplication::PacketSize", StringValue("64"));
