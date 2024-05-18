@@ -2,6 +2,31 @@ local agent = {}
 local mobility_model = {}
 local random_waypoint_mobility, random_point_group_mobility
 
+local vector = {}
+
+-- basic vector operations
+
+function vector.dist_to(from, to)
+    local dx = from.x - to.x
+    local dy = from.y - to.y
+    return math.sqrt(dx * dx + dy * dy)
+end
+
+function vector.unit(v)
+    local magnitude = math.sqrt(v[1] * v[1] + v[2] * v[2])
+    return  {
+        v[1] / magnitude,
+        v[2] / magnitude,
+    }
+end
+
+function vector.add(a, b)
+    return {
+        a[1] + b[1],
+        a[2] + b[2],
+    }
+end
+
 -- agent implementation
 
 function agent.new(id, color)
@@ -21,15 +46,53 @@ function agent:add_point(point, time)
         error("Can not add point in the past!")
     end
 
+    local speed = 0
+    if #self.path ~= 0 then
+        local prev = self:get_last_pos()
+        local dist = vector.dist_to(point, prev)
+        if time - prev.time > 0 then
+            speed = dist / (time - prev.time)
+        end
+    end
+
     table.insert(self.path, {
         x = point.x,
         y = point.y,
-        time = time
+        time = time,
+        speed = speed
     })
 end
 
 function agent:get_pos(time)
+    local step = 1
+    local speed = 0
 
+    for i, point in ipairs(self.path) do
+        if point.time <= time then
+            step = i
+
+            if point.speed > 0 then
+                speed = point.speed
+            end
+        end
+    end
+
+    if not self.path[step + 1] or not self.path[step] or self.path[step].time == time then
+        return self.path[step]
+    end
+
+    local dx = self.path[step + 1].x - self.path[step].x
+    local dy = self.path[step + 1].y - self.path[step].y
+    local dt = self.path[step + 1].time - self.path[step].time
+
+    local ratio = (time - self.path[step].time) / dt
+
+    return {
+        x = self.path[step].x + dx * ratio,
+        y = self.path[step].y + dy * ratio,
+        time = time,
+        speed = speed
+    }
 end
 
 function agent:get_last_pos()
@@ -43,12 +106,31 @@ function agent:get_last_pos()
 end
 
 function agent:get_color()
-    return self.color    
+    return self.color
+end
+
+function agent:get_color_str()
+    local col = self:get_color()
+    col[1] = col[1] or 0
+    col[2] = col[2] or 0
+    col[3] = col[3] or 0
+    return ("rgb(%d, %d, %d)"):format(table.unpack(col))
+end
+
+function agent:set_color(rgb)
+    self.color = rgb
 end
 
 function agent:dump(filename)
     local data = ("%d %d %d\n"):format(table.unpack(self:get_color()))
     for _, point in pairs(self.path) do
+        point.x = math.max(0, point.x)
+        point.y = math.max(0, point.y)
+
+        point.x = math.floor(point.x)
+        point.y = math.floor(point.y)
+        point.time = math.floor(point.time)
+
         data = data .. ("%d %d %d\n"):format(point.x, point.y, point.time)
     end
 
@@ -71,7 +153,9 @@ end
 
 function mobility_model:init(config)
     for key, value in pairs(config) do
-        self[key] = value
+        if type(value) ~= "function" then
+            self[key] = value
+        end
     end
 
     -- initialize randomly all agents, it is common part
@@ -110,9 +194,8 @@ function random_waypoint_mobility.new(config)
 end
 
 function random_waypoint_mobility:run()
-    local tmp = 1
     self:for_each_agent(function(ag)
-        ag.color = self.mobility.color
+        ag:set_color(self.mobility.color)
         -- provide waypoint mobility path to the agent
 
         local timeline = ag:get_last_pos().time
@@ -124,7 +207,7 @@ function random_waypoint_mobility:run()
             local dist = math.sqrt(dest[1] * dest[1] + dest[2] * dest[2])
             local speed = math.random(self.mobility.speed.min, self.mobility.speed.max)
 
-            local time = math.floor(dist / speed)
+            local time = dist / speed
 
             local last_pos = ag:get_last_pos()
 
@@ -144,22 +227,134 @@ function random_waypoint_mobility:run()
             last_pos = ag:get_last_pos()
             timeline = last_pos.time
         end
+
+        -- remove last pause
+        table.remove(ag.path, #ag.path)
     end)
 end
 
 -- Random Group Mobility
 
--- random_point_group_mobility = mobility_model.new()
+random_point_group_mobility = mobility_model.new()
 
--- function random_point_group_mobility.new(config)
---     local instance = config
---     setmetatable(instance, {__index = random_point_group_mobility})
---     return instance
--- end
+function random_point_group_mobility.new(config)
+    local instance = mobility_model.new()
+    instance:init(config)
 
--- function random_point_group_mobility:run()
+    -- preserve config for waypoint mobility for leaders
+    local rwmm = {}
+    for k, v in pairs(config) do
+        rwmm[k] = v
+    end
 
--- end
+    rwmm.grid.agents = config.mobility.groups
+    rwmm.mobility.color = {0, 0, 0}
+    instance.rwmm = rwmm
+
+    setmetatable(instance, {
+        __index = random_point_group_mobility
+    })
+    return instance
+end
+
+function random_point_group_mobility:for_each_leader(func)
+    self:for_each_agent(function(ag)
+        -- leaders are the first N agents
+        if ag.id <= self.mobility.groups then
+            func(ag)
+        end
+    end)
+end
+
+function random_point_group_mobility:for_each_follower(id, func)
+    if id > self.mobility.groups then
+        return
+    end
+
+    -- followers are distinguished by color
+    local leader = self.agents[id]
+
+    self:for_each_agent(function(ag)
+        -- skip leaders
+        if ag.id <= self.mobility.groups then
+            return
+        end
+
+        if leader:get_color_str() == ag:get_color_str() then
+            func(ag)
+        end
+    end)
+end
+
+function random_point_group_mobility:sync_movement(leader, fol)
+    for step = 2, self.time, 3 do
+        local lpos = leader:get_pos(step)
+
+        local dest = {math.random(self.grid.width), math.random(self.grid.height)}
+
+        -- unit vector
+        local direction = vector.unit(dest)
+
+        -- select distance from leader
+        local dist_l = math.random(self.mobility.leader_radius)
+
+        local fol_dest = {direction[1] * dist_l + lpos.x, direction[2] * dist_l + lpos.y}
+        local fpos = fol:get_last_pos()
+        local distfl = vector.dist_to(fpos, lpos)
+
+        -- if dist to leader is more than accepted, set speed to max
+        local speed
+        if distfl > self.mobility.leader_radius then
+            speed = self.mobility.speed.max
+        else
+            local lspeed = lpos.speed
+            local devi = math.random(self.mobility.deviation)
+            speed = math.max(self.mobility.speed.min, lspeed + devi)
+        end
+
+        local fdir = {fol_dest[1] - fpos.x, fol_dest[2] - fpos.y}
+
+        local fdir_unit = vector.unit(fdir)
+
+        local fdir_speed = {fdir_unit[1] * speed, fdir_unit[2] * speed}
+
+        local newx = math.max(0, math.min(fpos.x + fdir_speed[1], self.grid.width))
+        local newy = math.max(0, math.min(fpos.y + fdir_speed[2], self.grid.height))
+        fol:add_point({x = newx, y = newy}, step)
+    end
+end
+
+function random_point_group_mobility:run()
+    -- leaders are obtained via random waypoint mobility model
+
+    -- this variables are used to initialize waypoint
+    self.color = {0, 0, 0}
+    self.grid.agents = self.mobility.groups
+
+    local rwmm = random_waypoint_mobility.new(self.rwmm)
+    rwmm:run()
+
+    rwmm:for_each_agent(function(ag)
+        self.agents[ag.id] = ag
+    end)
+
+    -- color leaders
+    self:for_each_leader(function(leader)
+        leader:set_color(self.mobility.colors[leader.id])
+    end)
+
+    -- TODO: Complete voting process
+    self:for_each_agent(function(ag)
+        local col = self.agents[((ag.id - 1) % self.mobility.groups) + 1].color
+        ag:set_color(col)
+    end)
+
+    self:for_each_leader(function(leader)
+        self:for_each_follower(leader.id, function(fol)
+            self:sync_movement(leader, fol)
+        end)
+    end)
+end
 
 -- load config and run program
 
@@ -180,4 +375,3 @@ mm:run()
 mm:for_each_agent(function(agent)
     agent:dump(("%s/agent_%d"):format(arg[2], agent.id))
 end)
-
