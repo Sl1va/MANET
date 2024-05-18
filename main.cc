@@ -7,6 +7,8 @@
 #include "ns3/yans-wifi-helper.h"
 #include "ns3/olsr-module.h"
 #include "ns3/applications-module.h"
+#include "ns3/batmand-helper.h"
+
 
 using namespace ns3;
 
@@ -16,7 +18,7 @@ static inline void PrintPacketInfo(Ptr<Socket> socket, Ptr<Packet> packet, Addre
 
 class Experiment {
 public:
-    Experiment(int nNodes);
+    Experiment(std::string routingProtocol);
     void Run();
 private:
     NodeContainer c;
@@ -40,7 +42,7 @@ void Experiment::Run() {
     AnimationInterface anim("animation.xml");
 
     for (uint32_t i = 0; i < this->c.GetN(); ++i) {
-        anim.UpdateNodeSize(i, 1, 1);
+        anim.UpdateNodeSize(i, 4, 4);
     }
 
     anim.EnablePacketMetadata(true);
@@ -52,6 +54,12 @@ void Experiment::Run() {
     anim.EnableWifiPhyCounters(Seconds(0), Seconds(200));
 
     // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
+
+    // Opening receive sockets in every node
+
+    // for (int i = 0; i < this->nNodes; i++) {
+    //     SetupPacketReceive(this->interfaces.GetAddress(i), this->c.Get(i));
+    // }
 
     OnOffHelper onoff1("ns3::UdpSocketFactory", Address());
     onoff1.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"));
@@ -69,6 +77,17 @@ void Experiment::Run() {
         temp.Stop(Seconds(200.0));
     }
 
+    // AddressValue remoteAddress(InetSocketAddress(this->interfaces.GetAddress(12), 9));
+    // onoff1.SetAttribute("Remote", remoteAddress);
+
+    // Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
+    // ApplicationContainer temp = onoff1.Install(this->c.Get(14));
+    // temp.Start(Seconds(120.0));
+    // temp.Stop(Seconds(160.0));
+
+
+
+
     CheckTransferredData();
 
     Simulator::Stop(Seconds(200.0));
@@ -76,11 +95,18 @@ void Experiment::Run() {
     Simulator::Destroy();
 }
 
-Experiment::Experiment(int nNodes) {
-    this->nNodes = nNodes;
+Experiment::Experiment(std::string routingProtocol) {
+    this->nNodes = 25;
     this->nSinks = 10;
     this->totalBytes = 0;
     this->totalPackets = 0;
+    std::string fieldSize = "ns3::UniformRandomVariable[Min=0.0|Max=120.0]";
+    std::string nodeSpeed = "ns3::UniformRandomVariable[Min=0.0|Max=5]";
+    std::string nodePause = "ns3::ConstantRandomVariable[Constant=5]"; 
+    std::string packetSize = "64";
+    std::string dataRate = "2048bps";
+    std::string dataMode = "DsssRate11Mbps";
+    double wifiRadius = 20.0;
 
     this->c.Create(this->nNodes);
 
@@ -89,21 +115,21 @@ Experiment::Experiment(int nNodes) {
     ObjectFactory pos;
 
     pos.SetTypeId("ns3::RandomRectanglePositionAllocator");
-    pos.Set("X", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
-    pos.Set("Y", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
+    pos.Set("X", StringValue(fieldSize));
+    pos.Set("Y", StringValue(fieldSize));
     Ptr<PositionAllocator> taPositionAlloc = pos.Create()->GetObject<PositionAllocator>();
 
     mobility.SetPositionAllocator(taPositionAlloc);
     mobility.SetMobilityModel("ns3::RandomWaypointMobilityModel",
-        "Speed", StringValue("ns3::UniformRandomVariable[Min=0.0|Max=5]"),
-        "Pause", StringValue("ns3::ConstantRandomVariable[Constant=0]"),
+        "Speed", StringValue(nodeSpeed),
+        "Pause", StringValue(nodePause),
         "PositionAllocator", PointerValue(taPositionAlloc));
     mobility.Install(this->c);
 
     // Global configs
-    Config::SetDefault("ns3::OnOffApplication::PacketSize", StringValue("64"));
-    Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue("2048bps"));
-    Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode", StringValue("DsssRate11Mbps"));
+    Config::SetDefault("ns3::OnOffApplication::PacketSize", StringValue(packetSize));
+    Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue(dataRate));
+    Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode", StringValue(dataMode));
 
     // Wifi and Channel
     WifiHelper wifi;
@@ -114,15 +140,15 @@ Experiment::Experiment(int nNodes) {
     wifiPhy.Set("RxGain", DoubleValue(0));
     wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
     // wifiChannel.AddPropagationLoss("ns3::FixedRssLossModel", "Rss", DoubleValue(-40));
-    wifiChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange", DoubleValue(20.0));
+    wifiChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange", DoubleValue(wifiRadius));
     wifiPhy.SetChannel(wifiChannel.Create());
 
     // MAC address and disable rate control
     WifiMacHelper wifiMac;
 
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
-        "DataMode", StringValue("DsssRate11Mbps"),
-        "ControlMode", StringValue("DsssRate11Mbps"));
+        "DataMode", StringValue(dataMode),
+        "ControlMode", StringValue(dataMode));
     // wifiPhy.Set("TxPowerStart", DoubleValue(2));
     // wifiPhy.Set("TxPowerEnd", DoubleValue(2));
 
@@ -131,10 +157,17 @@ Experiment::Experiment(int nNodes) {
 
     // Routing protocol
     OlsrHelper olsr;
+    BatmandHelper batman;
     Ipv4ListRoutingHelper list;
     InternetStackHelper internet;
 
-    list.Add(olsr, 100);
+    if (routingProtocol == "OLSR") {
+        list.Add(olsr, 100);
+    }
+    else if (routingProtocol == "BATMAN") {
+        list.Add(batman, 100);
+    }
+
     internet.SetRoutingHelper(list);
     internet.Install(this->c);
 
@@ -182,9 +215,9 @@ void Experiment::ReceivePacket(Ptr<Socket> socket) {
 }
 
 static inline void PrintPacketInfo(Ptr<Socket> socket, Ptr<Packet> packet, Address senderAddress) {
-    std::cout << Simulator::Now().GetSeconds() << " " << socket->GetNode()->GetId();
+    std::cout << "[" << Simulator::Now().GetSeconds() << "] " << socket->GetNode()->GetId();
 
-    if (InetSocketAddress::IsMatchingType(senderAddress)) {
+    if (InetSocketAddress::IsMatchingType(senderAddress)) { 
         InetSocketAddress addr = InetSocketAddress::ConvertFrom(senderAddress);
         std::cout << " received one packet from " << addr.GetIpv4() << std::endl;
     }
@@ -204,14 +237,16 @@ Ptr<Socket> Experiment::SetupPacketReceive(Ipv4Address addr, Ptr<Node> node) {
 }
 
 int main(int argc, char *argv[]) {
-    int nNodes = 20;
 
     CommandLine cmd;
-    cmd.AddValue("nNodes", "number of nodes", nNodes);
     cmd.Parse(argc, argv);
 
-    Experiment exp = Experiment(nNodes);
-    exp.Run();
+    //Experiment expB = Experiment("BATMAN");
+    //expB.Run();
+    
+
+    Experiment expO = Experiment("OLSR");
+    expO.Run();
     
     return 0;
 }
