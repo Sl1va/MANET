@@ -10,6 +10,18 @@ cp ${REPO}/main.cc scratch/
 ./ns3 run scratch/main.cc
 ```
 
+## How to run Mobility Model Generator
+
+Mobility generator is located in `mmgen.lua` and requires lua5.2 or later. It accepts mobility config (see `rgmm.conf` and `rwmm.conf` for reference) and output directory (should be created before run).
+
+For example, in order to generate Random Point Group Mobility, run:
+```bash
+mkdir -p out
+lua mmgen.lua rgmm.conf out
+```
+
+Then out/ directory will contain mobility information for each node, and this directory should be placed in the path where ns-3 simulation are runned.
+
 ## Attention
 - Я не знаю, как запустить, если главный файл разделить на несколько!
 Надо какой-то модуль создать, тяжело с этим разобраться
