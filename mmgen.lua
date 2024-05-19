@@ -4,6 +4,21 @@ local random_waypoint_mobility, random_point_group_mobility
 
 local vector = {}
 
+local function table_deep_copy(tbl)
+    -- actually won't work in bidirectional references,
+    -- but we are not going to them
+    local res = {}
+    for k, v in pairs(tbl) do
+        if type(v) == "table" then
+            res[k] = table_deep_copy(v)
+        else
+            res[k] = v
+        end
+    end
+
+    return res
+end
+
 -- basic vector operations
 
 function vector.dist_to(from, to)
@@ -242,10 +257,7 @@ function random_point_group_mobility.new(config)
     instance:init(config)
 
     -- preserve config for waypoint mobility for leaders
-    local rwmm = {}
-    for k, v in pairs(config) do
-        rwmm[k] = v
-    end
+    local rwmm = table_deep_copy(config)
 
     rwmm.grid.agents = config.mobility.groups
     rwmm.mobility.color = {0, 0, 0}
@@ -261,6 +273,14 @@ function random_point_group_mobility:for_each_leader(func)
     self:for_each_agent(function(ag)
         -- leaders are the first N agents
         if ag.id <= self.mobility.groups then
+            func(ag)
+        end
+    end)
+end
+
+function random_point_group_mobility:for_each_nonleader(func)
+    self:for_each_agent(function(ag)
+        if ag.id > self.mobility.groups then
             func(ag)
         end
     end)
@@ -287,7 +307,8 @@ function random_point_group_mobility:for_each_follower(id, func)
 end
 
 function random_point_group_mobility:sync_movement(leader, fol)
-    for step = 2, self.time, 3 do
+    local mob_int = self.mobility.follower_interval
+    for step = 2, self.time, mob_int do
         local lpos = leader:get_pos(step)
 
         local dest = {math.random(self.grid.width), math.random(self.grid.height)}
@@ -307,16 +328,23 @@ function random_point_group_mobility:sync_movement(leader, fol)
         if distfl > self.mobility.leader_radius then
             speed = self.mobility.speed.max
         else
+            -- deviation also can slow down
+            local prod = math.random(0, 1)
+            if prod == 0 then
+                prod = -1
+            end
+
             local lspeed = lpos.speed
-            local devi = math.random(self.mobility.deviation)
+            local devi = math.random(self.mobility.deviation) * prod
             speed = math.max(self.mobility.speed.min, lspeed + devi)
+            speed = math.min(self.mobility.speed.max, speed)
         end
 
         local fdir = {fol_dest[1] - fpos.x, fol_dest[2] - fpos.y}
 
         local fdir_unit = vector.unit(fdir)
 
-        local fdir_speed = {fdir_unit[1] * speed, fdir_unit[2] * speed}
+        local fdir_speed = {fdir_unit[1] * speed * mob_int, fdir_unit[2] * speed * mob_int}
 
         local newx = math.max(0, math.min(fpos.x + fdir_speed[1], self.grid.width))
         local newy = math.max(0, math.min(fpos.y + fdir_speed[2], self.grid.height))
@@ -324,12 +352,47 @@ function random_point_group_mobility:sync_movement(leader, fol)
     end
 end
 
+function random_point_group_mobility:distribute_followers()
+    local nocolor = self.grid.agents - self.mobility.groups
+
+    while nocolor > 0 do
+        self:for_each_leader(function(leader)
+            local lpos = leader:get_last_pos()
+
+            local closest
+
+            self:for_each_nonleader(function(ag)
+                if ag:get_color() ~= nil then
+                    return
+                end
+
+                local dist = vector.dist_to(lpos, ag:get_last_pos())
+                if not closest or dist < vector.dist_to(lpos, closest:get_last_pos()) then
+                    closest = ag
+                end
+            end)
+
+            if closest then
+                closest:set_color(leader:get_color())
+            end
+        end)
+
+        local _nocolor = 0
+        self:for_each_nonleader(function(fol)
+            if fol:get_color() == nil then
+                _nocolor = _nocolor + 1
+            end
+        end)
+        nocolor = _nocolor
+    end
+end
+
 function random_point_group_mobility:run()
     -- leaders are obtained via random waypoint mobility model
 
     -- this variables are used to initialize waypoint
-    self.color = {0, 0, 0}
-    self.grid.agents = self.mobility.groups
+    -- self.color = {0, 0, 0}
+    -- self.grid.agents = self.mobility.groups
 
     local rwmm = random_waypoint_mobility.new(self.rwmm)
     rwmm:run()
@@ -343,11 +406,7 @@ function random_point_group_mobility:run()
         leader:set_color(self.mobility.colors[leader.id])
     end)
 
-    -- TODO: Complete voting process
-    self:for_each_agent(function(ag)
-        local col = self.agents[((ag.id - 1) % self.mobility.groups) + 1].color
-        ag:set_color(col)
-    end)
+    self:distribute_followers()
 
     self:for_each_leader(function(leader)
         self:for_each_follower(leader.id, function(fol)
