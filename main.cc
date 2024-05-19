@@ -290,8 +290,6 @@ Ptr<Socket> Experiment::SetupPacketReceive(Ipv4Address addr, Ptr<Node> node) {
 }
 
 int main(int argc, char *argv[]) {
-    int nNodes = 50;
-
     CommandLine cmd;
     cmd.Parse(argc, argv);
 
