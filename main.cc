@@ -36,6 +36,7 @@ private:
     int nSinks;
     int totalBytes;
     int totalPackets;
+    int packetSize;
 
     void SetPosition(Ptr<Node> node, Vector position);
     Vector GetPosition(Ptr<Node> node);
@@ -44,94 +45,22 @@ private:
     void CheckRemainingEnergy();
 
     void ReceivePacket(Ptr<Socket> socket);
+    void SendPacket(Ptr<Socket> socket, InetSocketAddress to, int packetSize);
     Ptr<Socket> SetupPacketReceive(Ipv4Address addr, Ptr<Node> node);
 };
 
-void Experiment::CheckRemainingEnergy() {
-    for (int i = 0; i < this->nNodes; i++) {
-        Ptr<DeviceEnergyModel> model = this->energies.Get(i);
-        std::cout << "Node [" << i << "] Energy consumption: " << model->GetTotalEnergyConsumption() << std::endl;
-    }
-}
-
-void Experiment::Run() {
-    AnimationInterface anim("animation.xml");
-
-    for (uint32_t i = 0; i < this->c.GetN(); ++i) {
-        anim.UpdateNodeSize(i, 15, 15);
-
-        std::stringstream ss;
-        ss << "out/agent_" << (i+1);
-        std::ifstream mm(ss.str());
-
-        int r, g, b;
-        if (mm >> r >> g >> b) {
-            anim.UpdateNodeColor(i, r, g, b);
-        }
-    }
-
-    anim.EnablePacketMetadata(true);
-    anim.EnableIpv4RouteTracking("routingtable.xml",
-        Seconds(0),
-        Seconds(200),
-        Seconds(0.25));
-    anim.EnableWifiMacCounters(Seconds(0), Seconds(200));
-    anim.EnableWifiPhyCounters(Seconds(0), Seconds(200));
-
-    // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
-
-    // Opening receive sockets in every node
-
-    // for (int i = 0; i < this->nNodes; i++) {
-    //     SetupPacketReceive(this->interfaces.GetAddress(i), this->c.Get(i));
-    // }
-
-    OnOffHelper onoff1("ns3::UdpSocketFactory", Address());
-    onoff1.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"));
-    onoff1.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0.0]"));
-
-    for (int i = 0; i < this->nSinks; i++) {
-        Ptr<Socket> sink = SetupPacketReceive(this->interfaces.GetAddress(i), this->c.Get(i));
-        
-        AddressValue remoteAddress(InetSocketAddress(this->interfaces.GetAddress(i), 9));
-        onoff1.SetAttribute("Remote", remoteAddress);
-
-        Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
-        ApplicationContainer temp = onoff1.Install(this->c.Get(i + this->nSinks));
-        temp.Start(Seconds(100.0));
-        temp.Stop(Seconds(200.0));
-    }
-
-    // AddressValue remoteAddress(InetSocketAddress(this->interfaces.GetAddress(12), 9));
-    // onoff1.SetAttribute("Remote", remoteAddress);
-
-    // Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
-    // ApplicationContainer temp = onoff1.Install(this->c.Get(14));
-    // temp.Start(Seconds(120.0));
-    // temp.Stop(Seconds(160.0));
-
-    Simulator::Schedule(Seconds(200.0), &Experiment::CheckRemainingEnergy, this);
-
-
-    CheckTransferredData();
-
-    Simulator::Stop(Seconds(200.0));
-    Simulator::Run();
-    Simulator::Destroy();
-}
-
 Experiment::Experiment(std::string routingProtocol) {
     this->nNodes = 25;
-    this->nSinks = 10;
+    this->nSinks = 100;
     this->totalBytes = 0;
     this->totalPackets = 0;
+    this->packetSize = 64;
     std::string fieldSize = "ns3::UniformRandomVariable[Min=0.0|Max=120.0]";
     std::string nodeSpeed = "ns3::UniformRandomVariable[Min=0.0|Max=5]";
     std::string nodePause = "ns3::ConstantRandomVariable[Constant=5]"; 
-    std::string packetSize = "64";
     std::string dataRate = "2048bps";
     std::string dataMode = "DsssRate11Mbps";
-    double wifiRadius = 20.0;
+    double wifiRadius = 100.0;
 
     this->c.Create(this->nNodes);
 
@@ -139,7 +68,7 @@ Experiment::Experiment(std::string routingProtocol) {
     for (int i = 1; i <= nNodes; ++i) {
         std::stringstream ss;
         ss << "out/agent_" << i;
-        std::ifstream mm(ss.str());
+        std::ifstream mm(ss.str().c_str());
 
         int r, g, b;
         mm >> r >> g >> b;
@@ -154,7 +83,7 @@ Experiment::Experiment(std::string routingProtocol) {
 
             if (time == last_time) break;
 
-            std::cout << x << " " << y << " " << time << "\n";
+            //std::cout << x << " " << y << " " << time << "\n";
 
             ns3::Waypoint waypoint(ns3::Seconds(time), ns3::Vector(x, y, 0)); 
             mobility->AddWaypoint(waypoint);
@@ -166,8 +95,6 @@ Experiment::Experiment(std::string routingProtocol) {
     }
 
     // Global configs
-    Config::SetDefault("ns3::OnOffApplication::PacketSize", StringValue(packetSize));
-    Config::SetDefault("ns3::OnOffApplication::DataRate", StringValue(dataRate));
     Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode", StringValue(dataMode));
 
     // Wifi and Channel
@@ -176,7 +103,7 @@ Experiment::Experiment(std::string routingProtocol) {
     YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default();
 
     wifi.SetStandard(WIFI_PHY_STANDARD_80211b);
-    wifiPhy.Set("RxGain", DoubleValue(0));
+    wifiPhy.Set("RxGain", DoubleValue(5));
     wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
     // wifiChannel.AddPropagationLoss("ns3::FixedRssLossModel", "Rss", DoubleValue(-40));
     wifiChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange", DoubleValue(wifiRadius));
@@ -188,8 +115,8 @@ Experiment::Experiment(std::string routingProtocol) {
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
         "DataMode", StringValue(dataMode),
         "ControlMode", StringValue(dataMode));
-    wifiPhy.Set("TxPowerStart", DoubleValue(2));
-    wifiPhy.Set("TxPowerEnd", DoubleValue(2));
+    wifiPhy.Set("TxPowerStart", DoubleValue(5));
+    wifiPhy.Set("TxPowerEnd", DoubleValue(5));
 
     wifiMac.SetType("ns3::AdhocWifiMac");
     this->devices = wifi.Install(wifiPhy, wifiMac, this->c);
@@ -203,8 +130,8 @@ Experiment::Experiment(std::string routingProtocol) {
     EnergySourceContainer sources = basicSourceHelper.Install(this->c);
 
     WifiRadioEnergyModelHelper radioEnergyHelper;
-    radioEnergyHelper.Set("TxCurrentA", DoubleValue(0.0174));
-    radioEnergyHelper.Set("RxCurrentA", DoubleValue(0.0174));
+    radioEnergyHelper.Set("TxCurrentA", DoubleValue(5.0174));
+    radioEnergyHelper.Set("RxCurrentA", DoubleValue(5.0174));
 
     this->energies = radioEnergyHelper.Install(this->devices, sources);
 
@@ -230,6 +157,87 @@ Experiment::Experiment(std::string routingProtocol) {
 
     ipAddresses.SetBase("10.0.0.0", "255.255.255.0");
     this->interfaces = ipAddresses.Assign(this->devices);
+}
+
+void Experiment::Run() {
+    AnimationInterface anim("animation.xml");
+
+    for (uint32_t i = 0; i < this->c.GetN(); ++i) {
+        anim.UpdateNodeSize(i, 15, 15);
+
+        std::stringstream ss;
+        ss << "out/agent_" << (i+1);
+        std::ifstream mm(ss.str().c_str());
+
+        int r, g, b;
+        if (mm >> r >> g >> b) {
+            anim.UpdateNodeColor(i, r, g, b);
+        }
+    }
+
+    anim.EnablePacketMetadata(true);
+    anim.EnableIpv4RouteTracking("routingtable.xml",
+        Seconds(0),
+        Seconds(200),
+        Seconds(0.25));
+    anim.EnableWifiMacCounters(Seconds(0), Seconds(200));
+    anim.EnableWifiPhyCounters(Seconds(0), Seconds(200));
+
+    // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
+
+    std::vector<Ptr<Socket> > sendSockets;
+
+    // Opening receive and send sockets in every node
+
+    for (int i = 0; i < this->nNodes; i++) {
+        SetupPacketReceive(this->interfaces.GetAddress(i), this->c.Get(i));
+
+        TypeId tid = TypeId::LookupByName("ns3::UdpSocketFactory");
+        Ptr<Socket> sendSocket = Socket::CreateSocket(this->c.Get(i), tid);
+        InetSocketAddress local = InetSocketAddress(this->interfaces.GetAddress(i), 15);
+        sendSocket->Bind(local);
+        sendSockets.push_back(sendSocket);  
+    }
+
+
+    for (int i = 0; i < this->nSinks; i++) {
+        Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
+
+        int from = var->GetInteger(0, this->nNodes - 1);
+        int to = var->GetInteger(0, this->nNodes - 1);
+
+        while (to == from) {
+            to = var->GetInteger(0, this->nNodes - 1);
+        }
+
+        Ptr<Socket> fromSocket = sendSockets[from];
+        InetSocketAddress addressTo(this->interfaces.GetAddress(to), 9);
+
+        int time = var->GetInteger(5, 195);
+        Simulator::Schedule(Seconds(time), &Experiment::SendPacket, this, fromSocket, addressTo, this->packetSize);
+        
+        // AddressValue remoteAddress(InetSocketAddress(this->interfaces.GetAddress(i), 9));
+        // onoff1.SetAttribute("Remote", remoteAddress);
+
+        // Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
+        // ApplicationContainer temp = onoff1.Install(this->c.Get(i + this->nSinks));
+        // temp.Start(Seconds(100.0));
+        // temp.Stop(Seconds(200.0));
+    }
+
+    Simulator::Schedule(Seconds(0.0), &Experiment::CheckRemainingEnergy, this);
+
+
+    Simulator::Schedule(Seconds(200.0), &Experiment::CheckRemainingEnergy, this);
+
+
+    CheckTransferredData();
+
+    // sockets[0]->SendTo(new Packet(64), 0, InetSocketAddress(this->interfaces.GetAddress(15), 9));
+
+    Simulator::Stop(Seconds(200.0));
+    Simulator::Run();
+    Simulator::Destroy();
 }
 
 void Experiment::CheckTransferredData() {
@@ -289,7 +297,22 @@ Ptr<Socket> Experiment::SetupPacketReceive(Ipv4Address addr, Ptr<Node> node) {
     return sink;
 }
 
+void Experiment::SendPacket(Ptr<Socket> socket, InetSocketAddress to, int packetSize) {
+    socket->SendTo(new Packet(packetSize), 0, to);
+}
+
+void Experiment::CheckRemainingEnergy() {
+    for (int i = 0; i < this->nNodes; i++) {
+        Ptr<DeviceEnergyModel> model = this->energies.Get(i);
+        std::cout << "Node [" << i << "] Energy consumption: " << model->GetTotalEnergyConsumption() << std::endl;
+    }
+}
+
 int main(int argc, char *argv[]) {
+
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
     CommandLine cmd;
     cmd.Parse(argc, argv);
 
@@ -297,8 +320,8 @@ int main(int argc, char *argv[]) {
     expB.Run();
     
 
-    //Experiment expO = Experiment("OLSR");
-    //expO.Run();
+    // Experiment expO = Experiment("OLSR");
+    // expO.Run();
     
     return 0;
 }
