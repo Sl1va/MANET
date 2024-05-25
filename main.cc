@@ -13,6 +13,7 @@
 #include "ns3/olsr-module.h"
 #include "ns3/wifi-radio-energy-model-helper.h"
 #include "ns3/applications-module.h"
+#include "ns3/flow-monitor-module.h"
 #include "ns3/batmand-helper.h"
 
 
@@ -51,7 +52,7 @@ private:
 
 Experiment::Experiment(std::string routingProtocol) {
     this->nNodes = 25;
-    this->nSinks = 100;
+    this->nSinks = 400;
     this->totalBytes = 0;
     this->totalPackets = 0;
     this->packetSize = 64;
@@ -60,7 +61,7 @@ Experiment::Experiment(std::string routingProtocol) {
     std::string nodePause = "ns3::ConstantRandomVariable[Constant=5]"; 
     std::string dataRate = "2048bps";
     std::string dataMode = "DsssRate11Mbps";
-    double wifiRadius = 100.0;
+    double wifiRadius = 25.0;
 
     this->c.Create(this->nNodes);
 
@@ -96,6 +97,8 @@ Experiment::Experiment(std::string routingProtocol) {
 
     // Global configs
     Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode", StringValue(dataMode));
+    // Config::SetDefault("ns3::batmand::RoutingProtocol::OGMInterval", TimeValue(Seconds(1 / 4)));
+
 
     // Wifi and Channel
     WifiHelper wifi;
@@ -103,7 +106,7 @@ Experiment::Experiment(std::string routingProtocol) {
     YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default();
 
     wifi.SetStandard(WIFI_PHY_STANDARD_80211b);
-    wifiPhy.Set("RxGain", DoubleValue(5));
+    wifiPhy.Set("RxGain", DoubleValue(15));
     wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
     // wifiChannel.AddPropagationLoss("ns3::FixedRssLossModel", "Rss", DoubleValue(-40));
     wifiChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange", DoubleValue(wifiRadius));
@@ -115,8 +118,8 @@ Experiment::Experiment(std::string routingProtocol) {
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
         "DataMode", StringValue(dataMode),
         "ControlMode", StringValue(dataMode));
-    wifiPhy.Set("TxPowerStart", DoubleValue(5));
-    wifiPhy.Set("TxPowerEnd", DoubleValue(5));
+    wifiPhy.Set("TxPowerStart", DoubleValue(15));
+    wifiPhy.Set("TxPowerEnd", DoubleValue(15));
 
     wifiMac.SetType("ns3::AdhocWifiMac");
     this->devices = wifi.Install(wifiPhy, wifiMac, this->c);
@@ -140,6 +143,13 @@ Experiment::Experiment(std::string routingProtocol) {
     BatmandHelper batman;
     Ipv4ListRoutingHelper list;
     InternetStackHelper internet;
+
+    olsr.Set("HelloInterval", TimeValue(Seconds(1)));
+    olsr.Set("TcInterval", TimeValue(Seconds(1)));
+    olsr.Set("MidInterval", TimeValue(Seconds(1)));
+    olsr.Set("HnaInterval", TimeValue(Seconds(1)));
+
+    batman.Set("OGMInterval", TimeValue(Seconds(1)));
 
     if (routingProtocol == "OLSR") {
         list.Add(olsr, 100);
@@ -182,6 +192,9 @@ void Experiment::Run() {
         Seconds(0.25));
     anim.EnableWifiMacCounters(Seconds(0), Seconds(200));
     anim.EnableWifiPhyCounters(Seconds(0), Seconds(200));
+
+    FlowMonitorHelper flowMonitor;
+    Ptr<FlowMonitor> monitor = flowMonitor.InstallAll();
 
     // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
 
@@ -237,6 +250,28 @@ void Experiment::Run() {
 
     Simulator::Stop(Seconds(200.0));
     Simulator::Run();
+
+    monitor->CheckForLostPackets();
+    Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowMonitor.GetClassifier());
+    std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats();
+
+    int totalSent = 0;
+    int totalReceived = 0;
+    int totalDropped = 0;
+
+    for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator it = stats.begin(); it != stats.end(); ++it) {
+        // Ipv4FlowClassifier::FiveTuple tuple = classifier->FindFlow(it->first);
+        // std::cout << "Flow: " << it->first << " Source IP: " << tuple.sourceAddress << " Destionation IP: " << tuple.destinationAddress << std::endl;
+
+        std::cout << " Packets Sent: " << it->second.txPackets << " Packets Received: " << it->second.rxPackets << " Packets Dropped: " << it->second.lostPackets << std::endl;
+
+        totalSent += it->second.txPackets;
+        totalReceived += it->second.rxPackets;
+        totalDropped += it->second.lostPackets;
+    }
+
+    std::cout << "Total Sent: " << totalSent << " Total Received: " << totalReceived << " Total Dropped: " << totalDropped << std::endl; 
+
     Simulator::Destroy();
 }
 
@@ -310,18 +345,22 @@ void Experiment::CheckRemainingEnergy() {
 
 int main(int argc, char *argv[]) {
 
+    NS_LOG_COMPONENT_DEFINE("MANET");
+    // ns3::LogComponentEnable("OlsrRoutingProtocol", ns3::LOG_LEVEL_ALL);
+    // ns3::LogComponentEnable("BatmanProtocol", ns3::LOG_LEVEL_ALL);
+
     RngSeedManager::SetSeed(1);
     RngSeedManager::SetRun(1);
 
     CommandLine cmd;
     cmd.Parse(argc, argv);
 
-    Experiment expB = Experiment("BATMAN");
-    expB.Run();
+    // Experiment expB = Experiment("BATMAN");
+    // expB.Run();
     
 
-    // Experiment expO = Experiment("OLSR");
-    // expO.Run();
+    Experiment expO = Experiment("OLSR");
+    expO.Run();
     
     return 0;
 }
