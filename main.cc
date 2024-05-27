@@ -37,6 +37,7 @@ private:
     int nSinks;
     int totalBytes;
     int totalPackets;
+    int packetsSent;
     int packetSize;
 
     void SetPosition(Ptr<Node> node, Vector position);
@@ -46,20 +47,22 @@ private:
     void CheckRemainingEnergy();
 
     void ReceivePacket(Ptr<Socket> socket);
-    void SendPacket(Ptr<Socket> socket, InetSocketAddress to, int packetSize);
+
+    void SendPacket(Ptr<Socket> socket, InetSocketAddress to, int packetSize, int index);
     Ptr<Socket> SetupPacketReceive(Ipv4Address addr, Ptr<Node> node);
 };
 
 Experiment::Experiment(std::string routingProtocol) {
     this->nNodes = 25;
-    this->nSinks = 400;
+    this->nSinks = 100;
     this->totalBytes = 0;
     this->totalPackets = 0;
-    this->packetSize = 64;
+    this->packetsSent = 0;
+    this->packetSize = 1024;
     std::string fieldSize = "ns3::UniformRandomVariable[Min=0.0|Max=120.0]";
     std::string nodeSpeed = "ns3::UniformRandomVariable[Min=0.0|Max=5]";
     std::string nodePause = "ns3::ConstantRandomVariable[Constant=5]"; 
-    std::string dataRate = "2048bps";
+    std::string dataRate = "11Mbps";
     std::string dataMode = "DsssRate11Mbps";
     double wifiRadius = 25.0;
 
@@ -144,10 +147,10 @@ Experiment::Experiment(std::string routingProtocol) {
     Ipv4ListRoutingHelper list;
     InternetStackHelper internet;
 
-    olsr.Set("HelloInterval", TimeValue(Seconds(1)));
-    olsr.Set("TcInterval", TimeValue(Seconds(1)));
-    olsr.Set("MidInterval", TimeValue(Seconds(1)));
-    olsr.Set("HnaInterval", TimeValue(Seconds(1)));
+    olsr.Set("HelloInterval", TimeValue(Seconds(1 * 4)));
+    olsr.Set("TcInterval", TimeValue(Seconds(1 * 4)));
+    olsr.Set("MidInterval", TimeValue(Seconds(1 * 4)));
+    olsr.Set("HnaInterval", TimeValue(Seconds(1 * 4)));
 
     batman.Set("OGMInterval", TimeValue(Seconds(1)));
 
@@ -173,7 +176,7 @@ void Experiment::Run() {
     AnimationInterface anim("animation.xml");
 
     for (uint32_t i = 0; i < this->c.GetN(); ++i) {
-        anim.UpdateNodeSize(i, 15, 15);
+        anim.UpdateNodeSize(i, 5, 5);
 
         std::stringstream ss;
         ss << "out/agent_" << (i+1);
@@ -199,6 +202,7 @@ void Experiment::Run() {
     // Simulator::Schedule(Seconds(1.0), &Experiment::DisplayNodesPosition, this);
 
     std::vector<Ptr<Socket> > sendSockets;
+    std::set<std::string> packets;
 
     // Opening receive and send sockets in every node
 
@@ -212,22 +216,36 @@ void Experiment::Run() {
         sendSockets.push_back(sendSocket);  
     }
 
+    Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
 
-    for (int i = 0; i < this->nSinks; i++) {
-        Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable>();
 
-        int from = var->GetInteger(0, this->nNodes - 1);
-        int to = var->GetInteger(0, this->nNodes - 1);
+    for (int i = 0; i < 10; i++) {
+        
+        int from, to, time;
 
-        while (to == from) {
+        while (true) {
+            from = var->GetInteger(0, this->nNodes - 1);
             to = var->GetInteger(0, this->nNodes - 1);
+
+            while (to == from) {
+                to = var->GetInteger(0, this->nNodes - 1);
+            }
+
+            time = var->GetInteger(0, 100);
+
+            std::stringstream ss;
+            ss << time << "_" << from << "_" << to;
+
+            if (packets.find(ss.str()) == packets.end()) {
+                packets.insert(ss.str());
+                break;
+            }
         }
 
         Ptr<Socket> fromSocket = sendSockets[from];
         InetSocketAddress addressTo(this->interfaces.GetAddress(to), 9);
 
-        int time = var->GetInteger(5, 195);
-        Simulator::Schedule(Seconds(time), &Experiment::SendPacket, this, fromSocket, addressTo, this->packetSize);
+        Simulator::Schedule(Seconds(time), &Experiment::SendPacket, this, fromSocket, addressTo, this->packetSize, from);
         
         // AddressValue remoteAddress(InetSocketAddress(this->interfaces.GetAddress(i), 9));
         // onoff1.SetAttribute("Remote", remoteAddress);
@@ -238,17 +256,21 @@ void Experiment::Run() {
         // temp.Stop(Seconds(200.0));
     }
 
-    Simulator::Schedule(Seconds(0.0), &Experiment::CheckRemainingEnergy, this);
+    for (std::set<std::string>::iterator it = packets.begin(); it != packets.end(); ++it) {
+        // std::cout << *it << std::endl;
+    }
+
+    // Simulator::Schedule(Seconds(0.0), &Experiment::CheckRemainingEnergy, this);
 
 
-    Simulator::Schedule(Seconds(200.0), &Experiment::CheckRemainingEnergy, this);
+    // Simulator::Schedule(Seconds(200.0), &Experiment::CheckRemainingEnergy, this);
 
 
-    CheckTransferredData();
+    // CheckTransferredData();
 
     // sockets[0]->SendTo(new Packet(64), 0, InetSocketAddress(this->interfaces.GetAddress(15), 9));
 
-    Simulator::Stop(Seconds(200.0));
+    Simulator::Stop(Seconds(100.0));
     Simulator::Run();
 
     monitor->CheckForLostPackets();
@@ -263,14 +285,15 @@ void Experiment::Run() {
         // Ipv4FlowClassifier::FiveTuple tuple = classifier->FindFlow(it->first);
         // std::cout << "Flow: " << it->first << " Source IP: " << tuple.sourceAddress << " Destionation IP: " << tuple.destinationAddress << std::endl;
 
-        std::cout << " Packets Sent: " << it->second.txPackets << " Packets Received: " << it->second.rxPackets << " Packets Dropped: " << it->second.lostPackets << std::endl;
+        // std::cout << " Packets Sent: " << it->second.txPackets << " Packets Received: " << it->second.rxPackets << " Packets Dropped: " << it->second.lostPackets << std::endl;
 
         totalSent += it->second.txPackets;
         totalReceived += it->second.rxPackets;
         totalDropped += it->second.lostPackets;
     }
 
-    std::cout << "Total Sent: " << totalSent << " Total Received: " << totalReceived << " Total Dropped: " << totalDropped << std::endl; 
+    // std::cout << "Total Sent: " << totalSent << " Total Received: " << totalReceived << " Total Dropped: " << totalDropped << std::endl; 
+    // std::cout << "Packets Sent: " << this->packetsSent << std::endl;
 
     Simulator::Destroy();
 }
@@ -314,11 +337,11 @@ static inline void PrintPacketInfo(Ptr<Socket> socket, Ptr<Packet> packet, Addre
     std::cout << "[" << Simulator::Now().GetSeconds() << "] " << socket->GetNode()->GetId();
 
     if (InetSocketAddress::IsMatchingType(senderAddress)) { 
-        InetSocketAddress addr = InetSocketAddress::ConvertFrom(senderAddress);
-        std::cout << " received one packet from " << addr.GetIpv4() << std::endl;
+        // InetSocketAddress addr = InetSocketAddress::ConvertFrom(senderAddress);
+        // std::cout << " received one packet from " << addr.GetIpv4() << std::endl;
     }
     else {
-        std::cout << " received one packet" << std::endl;
+        // std::cout << " received one packet" << std::endl;
     }
 }
 
@@ -332,8 +355,12 @@ Ptr<Socket> Experiment::SetupPacketReceive(Ipv4Address addr, Ptr<Node> node) {
     return sink;
 }
 
-void Experiment::SendPacket(Ptr<Socket> socket, InetSocketAddress to, int packetSize) {
+void Experiment::SendPacket(Ptr<Socket> socket, InetSocketAddress to, int packetSize, int index) {
+    this->packetsSent++;
     socket->SendTo(new Packet(packetSize), 0, to);
+    // this->interfaces.Get(index).first->GetRoutingProtocol()->PrintRoutingTable(Create<OutputStreamWrapper>(&std::cout));
+    // std::cout << "From: " << this->interfaces.GetAddress(index) << " To: " << to.GetIpv4() << std::endl;
+    // std::cout << "UDP Result ["<< Simulator::Now().GetSeconds() << "]: " << res << std::endl;
 }
 
 void Experiment::CheckRemainingEnergy() {
@@ -347,7 +374,8 @@ int main(int argc, char *argv[]) {
 
     NS_LOG_COMPONENT_DEFINE("MANET");
     // ns3::LogComponentEnable("OlsrRoutingProtocol", ns3::LOG_LEVEL_ALL);
-    // ns3::LogComponentEnable("BatmanProtocol", ns3::LOG_LEVEL_ALL);
+    ns3::LogComponentEnable("BatmanProtocol", ns3::LOG_LEVEL_ALL);
+    // ns3::LogComponentEnable("Socket", ns3::LOG_LEVEL_ERROR);
 
     RngSeedManager::SetSeed(1);
     RngSeedManager::SetRun(1);
