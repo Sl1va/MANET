@@ -1,5 +1,6 @@
 import re
 from collections import defaultdict
+from sys import argv
 
 # Regular expressions to match log lines
 # packet_sent_re = re.compile(r'OLSR node (\S+) sending a OLSR packet')
@@ -25,7 +26,7 @@ packets_sent_per_second_by_node = defaultdict(lambda: defaultdict(int))
 packets_received_per_second_by_node = defaultdict(lambda: defaultdict(int))
 
 # Read the log file
-with open('olsr.group.log', 'r') as file:
+with open(argv[1], 'r') as file:
     for line in file:
         hello_received_match = hello_received_re.search(line)
         tc_received_match = tc_received_re.search(line)

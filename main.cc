@@ -147,10 +147,10 @@ Experiment::Experiment(std::string routingProtocol) {
     Ipv4ListRoutingHelper list;
     InternetStackHelper internet;
 
-    olsr.Set("HelloInterval", TimeValue(Seconds(1 * 4)));
-    olsr.Set("TcInterval", TimeValue(Seconds(1 * 4)));
-    olsr.Set("MidInterval", TimeValue(Seconds(1 * 4)));
-    olsr.Set("HnaInterval", TimeValue(Seconds(1 * 4)));
+    olsr.Set("HelloInterval", TimeValue(Seconds(1)));
+    olsr.Set("TcInterval", TimeValue(Seconds(1)));
+    olsr.Set("MidInterval", TimeValue(Seconds(1)));
+    olsr.Set("HnaInterval", TimeValue(Seconds(1)));
 
     batman.Set("OGMInterval", TimeValue(Seconds(1)));
 
@@ -372,8 +372,10 @@ void Experiment::CheckRemainingEnergy() {
 
 int main(int argc, char *argv[]) {
 
+    std::string rProtocol = "-";
+
     NS_LOG_COMPONENT_DEFINE("MANET");
-    // ns3::LogComponentEnable("OlsrRoutingProtocol", ns3::LOG_LEVEL_ALL);
+    ns3::LogComponentEnable("OlsrRoutingProtocol", ns3::LOG_LEVEL_ALL);
     ns3::LogComponentEnable("BatmanProtocol", ns3::LOG_LEVEL_ALL);
     // ns3::LogComponentEnable("Socket", ns3::LOG_LEVEL_ERROR);
 
@@ -381,14 +383,16 @@ int main(int argc, char *argv[]) {
     RngSeedManager::SetRun(1);
 
     CommandLine cmd;
+    cmd.AddValue("rProtocol", "Routing Protocol [BATMAN; OLSR]", rProtocol);
     cmd.Parse(argc, argv);
 
-    // Experiment expB = Experiment("BATMAN");
-    // expB.Run();
-    
+    if (rProtocol != "BATMAN" && rProtocol != "OLSR") {
+        std::cout << "Wrong protocol name: " << rProtocol << std::endl;
+        exit(1);
+    }
 
-    Experiment expO = Experiment("OLSR");
-    expO.Run();
+    Experiment exp = Experiment(rProtocol);
+    exp.Run();
     
     return 0;
 }
