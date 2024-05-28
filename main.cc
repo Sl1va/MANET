@@ -25,7 +25,7 @@ static inline void PrintPacketInfo(Ptr<Socket> socket, Ptr<Packet> packet, Addre
 
 class Experiment {
 public:
-    Experiment(std::string routingProtocol);
+    Experiment(std::string routingProtocol, std::string outDirPath, std::string animPath);
     void Run();
 private:
     NodeContainer c;
@@ -39,6 +39,7 @@ private:
     int totalPackets;
     int packetsSent;
     int packetSize;
+    std::string animPath;
 
     void SetPosition(Ptr<Node> node, Vector position);
     Vector GetPosition(Ptr<Node> node);
@@ -52,13 +53,15 @@ private:
     Ptr<Socket> SetupPacketReceive(Ipv4Address addr, Ptr<Node> node);
 };
 
-Experiment::Experiment(std::string routingProtocol) {
+Experiment::Experiment(std::string routingProtocol, std::string outDirPath, std::string animPath) {
     this->nNodes = 25;
     this->nSinks = 100;
     this->totalBytes = 0;
     this->totalPackets = 0;
     this->packetsSent = 0;
     this->packetSize = 1024;
+    this->animPath = animPath;
+
     std::string fieldSize = "ns3::UniformRandomVariable[Min=0.0|Max=120.0]";
     std::string nodeSpeed = "ns3::UniformRandomVariable[Min=0.0|Max=5]";
     std::string nodePause = "ns3::ConstantRandomVariable[Constant=5]"; 
@@ -71,7 +74,7 @@ Experiment::Experiment(std::string routingProtocol) {
     // Setting MobilityModel
     for (int i = 1; i <= nNodes; ++i) {
         std::stringstream ss;
-        ss << "out/agent_" << i;
+        ss << outDirPath << "/agent_" << i;
         std::ifstream mm(ss.str().c_str());
 
         int r, g, b;
@@ -173,7 +176,7 @@ Experiment::Experiment(std::string routingProtocol) {
 }
 
 void Experiment::Run() {
-    AnimationInterface anim("animation.xml");
+    AnimationInterface anim(this->animPath);
 
     for (uint32_t i = 0; i < this->c.GetN(); ++i) {
         anim.UpdateNodeSize(i, 5, 5);
@@ -189,12 +192,8 @@ void Experiment::Run() {
     }
 
     anim.EnablePacketMetadata(true);
-    anim.EnableIpv4RouteTracking("routingtable.xml",
-        Seconds(0),
-        Seconds(200),
-        Seconds(0.25));
-    anim.EnableWifiMacCounters(Seconds(0), Seconds(200));
-    anim.EnableWifiPhyCounters(Seconds(0), Seconds(200));
+    anim.EnableWifiMacCounters(Seconds(0), Seconds(100));
+    anim.EnableWifiPhyCounters(Seconds(0), Seconds(100));
 
     FlowMonitorHelper flowMonitor;
     Ptr<FlowMonitor> monitor = flowMonitor.InstallAll();
@@ -373,6 +372,8 @@ void Experiment::CheckRemainingEnergy() {
 int main(int argc, char *argv[]) {
 
     std::string rProtocol = "-";
+    std::string outDirPath = "-";
+    std::string animPath = "-";
 
     NS_LOG_COMPONENT_DEFINE("MANET");
     ns3::LogComponentEnable("OlsrRoutingProtocol", ns3::LOG_LEVEL_ALL);
@@ -384,6 +385,8 @@ int main(int argc, char *argv[]) {
 
     CommandLine cmd;
     cmd.AddValue("rProtocol", "Routing Protocol [BATMAN; OLSR]", rProtocol);
+    cmd.AddValue("outDirPath", "Path to Mobility Model directory", outDirPath);
+    cmd.AddValue("animPath", "Path to save NetAnim animation", animPath);
     cmd.Parse(argc, argv);
 
     if (rProtocol != "BATMAN" && rProtocol != "OLSR") {
@@ -391,7 +394,7 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    Experiment exp = Experiment(rProtocol);
+    Experiment exp = Experiment(rProtocol, outDirPath, animPath);
     exp.Run();
     
     return 0;
