@@ -417,11 +417,18 @@ end
 
 -- load config and run program
 
-assert(arg[1] and arg[2], "Usage: mmgen CONFIG_NAME OUTDIR")
+assert(arg[1] and arg[2], "Usage: mmgen CONFIG_NAME OUTDIR [SEED]")
+
+local seed = tonumber(arg[3])
+if seed then
+    print(("Custom seed is set to %d"):format(seed))
+end
 
 local file = io.open(arg[1], "r")
 local config = load("return " .. file:read("*a"))()
 file:close()
+
+config.seed = seed or config.seed
 
 local mm
 if config.mobility.model == "RWMM" then
