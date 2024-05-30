@@ -8,8 +8,8 @@ temp_log_file=$log_dir_name"temp.log"
 waf_path="$HOME/workspace/bake/source/ns-3.25/"
 manet_path="$HOME/MANET/"
 
-# seed=(1 5 7 13 56 43 66 12 87 132)
-seed=(1)
+seed=(1 5 7 13 56 43 66 12 87 132)
+# seed=(1)
 
 for elem in "${seed[@]}"
 do
@@ -72,18 +72,18 @@ do
 
     # Running BATMAN
 
-    cd $waf_path
-    bat_anim_path=$anim_dir_name"batman.group."$elem".xml"
-    ./waf --run "main --rProtocol=BATMAN --outDirPath=$group_dir_name_full --animPath=$bat_anim_path" 2> $temp_log_file
+    # cd $waf_path
+    # bat_anim_path=$anim_dir_name"batman.group."$elem".xml"
+    # ./waf --run "main --rProtocol=BATMAN --outDirPath=$group_dir_name_full --animPath=$bat_anim_path" 2> $temp_log_file
     
-    cd $manet_path
-    python batman_log_reader.py $temp_log_file > $log_dir_name"batman.group."$elem".json";
+    # cd $manet_path
+    # python batman_log_reader.py $temp_log_file > $log_dir_name"batman.group."$elem".json";
 
-    cd $waf_path
-    bat_anim_path=$anim_dir_name"batman.ind."$elem".xml"
-    ./waf --run "main --rProtocol=BATMAN --outDirPath=$ind_dir_name_full --animPath=$bat_anim_path" 2> $temp_log_file
+    # cd $waf_path
+    # bat_anim_path=$anim_dir_name"batman.ind."$elem".xml"
+    # ./waf --run "main --rProtocol=BATMAN --outDirPath=$ind_dir_name_full --animPath=$bat_anim_path" 2> $temp_log_file
     
-    cd $manet_path
-    python batman_log_reader.py $temp_log_file > $log_dir_name"batman.ind."$elem".json";
+    # cd $manet_path
+    # python batman_log_reader.py $temp_log_file > $log_dir_name"batman.ind."$elem".json";
 
 done

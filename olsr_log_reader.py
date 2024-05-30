@@ -5,10 +5,10 @@ from sys import argv
 # Regular expressions to match log lines
 # packet_sent_re = re.compile(r'OLSR node (\S+) sending a OLSR packet')
 # packet_received_re = re.compile(r'OLSR node (\S+) received a OLSR packet')
-hello_received_re = re.compile(r'(\d+\.\d+)s OLSR node (\S+) received HELLO message of size \d+')
-tc_received_re = re.compile(r'(\d+\.\d+)s OLSR node (\S+) received TC message of size \d+')
-mid_received_re = re.compile(r'(\d+\.\d+)s OLSR node (\S+) received MID message of size \d+')
-hna_received_re = re.compile(r'(\d+\.\d+)s OLSR node (\S+) received HNA message of size \d+')
+hello_received_re = re.compile(r'\[node (\d+)\] ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)s OLSR node (\S+) received HELLO message of size \d+')
+tc_received_re = re.compile(r'\[node (\d+)\] ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)s OLSR node (\S+) received TC message of size \d+')
+mid_received_re = re.compile(r'\[node (\d+)\] ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)s OLSR node (\S+) received MID message of size \d+')
+hna_received_re = re.compile(r'\[node (\d+)\] ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)s OLSR node (\S+) received HNA message of size \d+')
 hello_sent = re.compile(r'\[node (\d+)\] (\d+)s : Sending HELLO packet')
 tc_sent = re.compile(r'\[node (\d+)\] (\d+)s : Sending TC packet')
 mid_sent = re.compile(r'\[node (\d+)\] (\d+)s : Sending MID packet')
@@ -41,8 +41,8 @@ with open(argv[1], 'r') as file:
         time_match = time_re.search(line)
         
         if hello_received_match:
-            time = hello_received_match.group(1)
-            node = hello_received_match.group(2)
+            time = int(round(float(hello_received_match.group(2))))
+            node = hello_received_match.group(1)
             second = int(float(time))
             
             total_packets_received += 1
@@ -51,8 +51,8 @@ with open(argv[1], 'r') as file:
             packets_received_per_second_by_node[second][node] += 1
         
         if tc_received_match:
-            time = tc_received_match.group(1)
-            node = tc_received_match.group(2)
+            time = int(round(float(tc_received_match.group(2))))
+            node = tc_received_match.group(1)
             second = int(float(time))
             
             total_packets_received += 1
@@ -61,8 +61,8 @@ with open(argv[1], 'r') as file:
             packets_received_per_second_by_node[second][node] += 1
         
         if mid_received_match:
-            time = mid_received_match.group(1)
-            node = mid_received_match.group(2)
+            time = int(round(float(mid_received_match.group(2))))
+            node = mid_received_match.group(1)
             second = int(float(time))
             
             total_packets_received += 1
@@ -71,8 +71,8 @@ with open(argv[1], 'r') as file:
             packets_received_per_second_by_node[second][node] += 1
         
         if hna_received_match:
-            time = hna_received_match.group(1)
-            node = hna_received_match.group(2)
+            time = int(round(float(hna_received_match.group(2))))
+            node = hna_received_match.group(1)
             second = int(float(time))
             
             total_packets_received += 1
