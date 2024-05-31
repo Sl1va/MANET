@@ -14,13 +14,13 @@ file_prefixes = [home_dir + i for i in file_prefixes]
 def sum_by_seconds(var1, var2):
     for t in range(0, 101):
         if str(t) not in var2: continue
-        var1[str(t)] += var2[str(t)]
+        var1[str(t)] += (var2[str(t)] * 1.0 / 10)
 
 
 def sum_by_nodes(var1, var2):
     for n in range(0, 25):
         if str(n) not in var2: continue
-        var1[str(n)] += var2[str(n)]
+        var1[str(n)] += (var2[str(n)] * 1.0 / 10)
 
 
 def sum_by_seconds_by_nodes(var1, var2):
@@ -28,18 +28,20 @@ def sum_by_seconds_by_nodes(var1, var2):
         if str(t) not in var2: continue
         for n in range(0, 25):
             if str(n) not in var2[str(t)]: continue
-            var1[str(t)][str(n)] += var2[str(t)][str(n)]
+            var1[str(t)][str(n)] += (var2[str(t)][str(n)] * 1.0 / 10)
 
 
 for file_prefix in file_prefixes:
     total_packets_sent = 0
     total_packets_received = 0
-    packets_sent_by_node = defaultdict(int)
-    packets_received_by_node = defaultdict(int)
-    packets_sent_per_second = defaultdict(int)
-    packets_received_per_second = defaultdict(int)
-    packets_sent_per_second_by_node = defaultdict(lambda: defaultdict(int))
-    packets_received_per_second_by_node = defaultdict(lambda: defaultdict(int))
+    packets_sent_by_node = defaultdict(float)
+    packets_received_by_node = defaultdict(float)
+    packets_sent_per_second = defaultdict(float)
+    packets_received_per_second = defaultdict(float)
+    packets_sent_per_second_by_node = defaultdict(lambda: defaultdict(float))
+    packets_received_per_second_by_node = defaultdict(lambda: defaultdict(float))
+
+    save_filename = file_prefix + "norm.json"
 
     for seed in seeds:
         filename = file_prefix + str(seed) + ".json"
@@ -72,4 +74,6 @@ for file_prefix in file_prefixes:
         'packets_received_per_second_by_node': {k: dict(v) for k, v in packets_received_per_second_by_node.items()},
     }
 
-    print(json.dumps(report, indent=4))
+    f = open(save_filename, "w")
+    f.write(json.dumps(report, indent=4))
+    f.close()

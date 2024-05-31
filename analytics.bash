@@ -17,35 +17,35 @@ do
     ind_dir_name_full=$ind_dir_name$elem/
 
     
-    if [ -d "$group_dir_name_full" ]; then
-        rm -r "$group_dir_name_full"
-    fi
+    # if [ -d "$group_dir_name_full" ]; then
+    #     rm -r "$group_dir_name_full"
+    # fi
 
-    if [ -d "$ind_dir_name_full" ]; then
-        rm -r "$ind_dir_name_full"
-    fi
+    # if [ -d "$ind_dir_name_full" ]; then
+    #     rm -r "$ind_dir_name_full"
+    # fi
 
-    if [ -d "$log_dir_name" ]; then
-        rm -r "$log_dir_name"
-    fi
+    # if [ -d "$log_dir_name" ]; then
+    #     rm -r "$log_dir_name"
+    # fi
 
-    if [ -d "$anim_dir_name" ]; then
-        rm -r "$anim_dir_name"
-    fi
+    # if [ -d "$anim_dir_name" ]; then
+    #     rm -r "$anim_dir_name"
+    # fi
 
-    if [ -e "$temp_log_file" ]; then
-        rm "$temp_log_file"
-    fi
+    # if [ -e "$temp_log_file" ]; then
+    #     rm "$temp_log_file"
+    # fi
 
     # Creating mobility models
 
-    mkdir $group_dir_name_full
-    mkdir $ind_dir_name_full
-    mkdir $log_dir_name
-    mkdir $anim_dir_name
-    touch $temp_log_file
-    touch $log_dir_name"olsr.group."$elem".json"
-    touch $log_dir_name"olsr.ind."$elem".json"
+    # mkdir $group_dir_name_full
+    # mkdir $ind_dir_name_full
+    # mkdir $log_dir_name
+    # mkdir $anim_dir_name
+    # touch $temp_log_file
+    # touch $log_dir_name"olsr.group."$elem".json"
+    # touch $log_dir_name"olsr.ind."$elem".json"
 
     lua mmgen.lua rgmm.conf $group_dir_name_full $elem
     lua mmgen.lua rwmm.conf $ind_dir_name_full $elem
